@@ -70,8 +70,13 @@ func (d *UpYunDeployer) UploadFiles() {
 	var urls []string
 	wg := &sync.WaitGroup{}
 
-	_ = filepath.Walk(d.basicDir, func(filename string, file os.FileInfo, err error) error {
+	err := filepath.Walk(d.basicDir, func(filename string, file os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
 		relativeFilename := strings.ReplaceAll(filename, d.basicDir, "")
+
 		if file.IsDir() || strings.HasPrefix(file.Name(), ".") || strings.HasPrefix(relativeFilename, ".") {
 			return nil
 		}
@@ -94,6 +99,11 @@ func (d *UpYunDeployer) UploadFiles() {
 	})
 
 	wg.Wait()
+
+	if err != nil {
+		fmt.Printf("err: %s\n", err)
+		return
+	}
 
 	failUrls, err := d.up.Purge(urls)
 	if err != nil {
@@ -215,7 +225,7 @@ func getBasicDir(level int) string {
 	segments := strings.Split(strings.Trim(getCurrentExecutePath(), "/"), "/")
 	max := len(segments) - level
 
-	dir := ""
+	dir := "/"
 	for i, segment := range segments {
 		if i < max {
 			dir = filepath.Join(dir, segment)
