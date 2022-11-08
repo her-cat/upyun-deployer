@@ -240,7 +240,7 @@ func main() {
 
 	deployer := &UpYunDeployer{
 		up:       up,
-		basicDir: getCurrentExecutePath(),
+		basicDir: getBasicDir(2),
 	}
 
 	begin := time.Now()
