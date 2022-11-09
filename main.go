@@ -110,6 +110,8 @@ func (d *UpYunDeployer) UploadFiles() {
 		fmt.Printf("purge failed urls: %v, err: %s\n", failUrls, err)
 	}
 
+	delete(dirs, "/")
+
 	d.deleteFiles(files)
 	d.deleteDirs(dirs)
 }
