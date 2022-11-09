@@ -127,18 +127,32 @@ func (d *UpYunDeployer) deleteFiles(files map[string]int) {
 
 func (d *UpYunDeployer) deleteDirs(dirs map[string]int) {
 	fmt.Println("deleting dirs...")
-	wg := sync.WaitGroup{}
+
+	maxDepth := 0
 	for dir := range dirs {
-		go func(dir string) {
-			wg.Add(1)
-			defer wg.Done()
-			_ = d.up.Delete(&upyun.DeleteObjectConfig{
-				Path: dir,
-			})
-			fmt.Printf("[%s] deleted!\n", dir)
-		}(dir)
+		segments := strings.Split(strings.Trim(dir, "/"), "/")
+		dirs[dir] = len(segments)
+		if len(segments) > maxDepth {
+			maxDepth = len(segments)
+		}
 	}
-	wg.Wait()
+
+	sortedDirs := make([]string, 0)
+	for maxDepth > 0 {
+		for dir, depth := range dirs {
+			if depth == maxDepth {
+				sortedDirs = append(sortedDirs, dir)
+			}
+		}
+		maxDepth--
+	}
+
+	for _, dir := range sortedDirs {
+		_ = d.up.Delete(&upyun.DeleteObjectConfig{
+			Path: dir,
+		})
+		fmt.Printf("[%s] deleted!\n", dir)
+	}
 }
 
 func (d *UpYunDeployer) handleFile(wg *sync.WaitGroup, filename string, relativeFilename string) {
@@ -225,23 +239,24 @@ func getCurrentExecutePath() string {
 	return filepath.Dir(ex)
 }
 
-func getBasicDir(level int) string {
+func getBasicDir(workDir string, level int) string {
 	segments := strings.Split(strings.Trim(getCurrentExecutePath(), "/"), "/")
 	max := len(segments) - level
 
-	dir := "/"
+	basicDir := "/"
 	for i, segment := range segments {
 		if i < max {
-			dir = filepath.Join(dir, segment)
+			basicDir = filepath.Join(basicDir, segment)
 		}
 	}
 
-	return fmt.Sprintf("%s/", dir)
+	return fmt.Sprintf("%s/%s", basicDir, workDir)
 }
 
 var bucket = flag.String("bucket", "", "")
 var operator = flag.String("operator", "", "")
 var password = flag.String("password", "", "")
+var dir = flag.String("dir", "", "")
 
 func main() {
 	flag.Parse()
@@ -254,7 +269,7 @@ func main() {
 
 	deployer := &UpYunDeployer{
 		up:       up,
-		basicDir: getBasicDir(2),
+		basicDir: getBasicDir(*dir, 2),
 	}
 
 	begin := time.Now()
