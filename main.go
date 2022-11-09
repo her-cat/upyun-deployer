@@ -75,7 +75,7 @@ func (d *UpYunDeployer) UploadFiles() {
 			return err
 		}
 
-		relativeFilename := strings.ReplaceAll(filename, d.basicDir, "")
+		relativeFilename := strings.Trim(strings.ReplaceAll(filename, d.basicDir, ""), "/")
 
 		if file.IsDir() || strings.HasPrefix(file.Name(), ".") || strings.HasPrefix(relativeFilename, ".") {
 			return nil
@@ -165,6 +165,10 @@ func (d *UpYunDeployer) handleFile(wg *sync.WaitGroup, filename string, relative
 		return
 	}
 
+	if err != nil {
+		return
+	}
+
 	if remoteFileInfo.MD5 == fmt.Sprintf("%x", md5.Sum(data)) {
 		fmt.Printf("[%s] cached!\n", relativeFilename)
 		return
@@ -232,7 +236,7 @@ func getBasicDir(level int) string {
 		}
 	}
 
-	return dir
+	return fmt.Sprintf("%s/", dir)
 }
 
 var bucket = flag.String("bucket", "", "")
