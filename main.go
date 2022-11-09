@@ -47,16 +47,18 @@ func (d *UpYunDeployer) GetAllRemoteFilesByPath(path string) (map[string]int, ma
 			continue
 		}
 
+		depth := 1
 		if obj.Name != "/" {
 			obj.Name = strings.Trim(obj.Name, "/")
+			depth = len(strings.Split(obj.Name, "/"))
 		}
 
 		if !obj.IsDir {
-			files[obj.Name] = 1
+			files[obj.Name] = depth
 			continue
 		}
 
-		directories[obj.Name] = 1
+		directories[obj.Name] = depth
 		go d.listDirs(obj.Name, objsChan)
 		counter++
 	}
@@ -131,11 +133,9 @@ func (d *UpYunDeployer) deleteDirs(dirs map[string]int) {
 	fmt.Println("deleting dirs...")
 
 	maxDepth := 0
-	for dir := range dirs {
-		segments := strings.Split(strings.Trim(dir, "/"), "/")
-		dirs[dir] = len(segments)
-		if len(segments) > maxDepth {
-			maxDepth = len(segments)
+	for _, depth := range dirs {
+		if depth > maxDepth {
+			maxDepth = depth
 		}
 	}
 
