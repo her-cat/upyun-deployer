@@ -80,6 +80,7 @@ func (d *UpYunDeployer) UploadFiles() {
 		relativeFilename := strings.Trim(strings.ReplaceAll(filename, d.basicDir, ""), "/")
 
 		if file.IsDir() || strings.HasPrefix(file.Name(), ".") || strings.HasPrefix(relativeFilename, ".") {
+			fmt.Printf("[%s] skiped!\n", relativeFilename)
 			return nil
 		}
 
@@ -167,12 +168,14 @@ func (d *UpYunDeployer) handleFile(wg *sync.WaitGroup, filename string, relative
 		return
 	}
 
+	contentType := detectContentType(filename, data)
+
 	remoteFileInfo, err := d.up.GetInfo(relativeFilename)
 	putObjectConfig := &upyun.PutObjectConfig{
 		Path:      relativeFilename,
 		LocalPath: filename,
 		Headers: map[string]string{
-			"Content-Type": detectContentType(filename, data),
+			"Content-Type": contentType,
 		},
 	}
 
@@ -185,7 +188,7 @@ func (d *UpYunDeployer) handleFile(wg *sync.WaitGroup, filename string, relative
 		return
 	}
 
-	if remoteFileInfo.MD5 == fmt.Sprintf("%x", md5.Sum(data)) {
+	if remoteFileInfo.Meta["Content-Type"] == contentType && remoteFileInfo.MD5 == fmt.Sprintf("%x", md5.Sum(data)) {
 		fmt.Printf("[%s] cached!\n", relativeFilename)
 		return
 	}
