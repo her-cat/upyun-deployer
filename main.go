@@ -172,7 +172,7 @@ func (d *UpYunDeployer) handleFile(wg *sync.WaitGroup, filename string, relative
 		Path:      relativeFilename,
 		LocalPath: filename,
 		Headers: map[string]string{
-			"Content-Type": http.DetectContentType(data),
+			"Content-Type": detectContentType(filename, data),
 		},
 	}
 
@@ -253,6 +253,17 @@ func getBasicDir(workDir string, level int) string {
 	}
 
 	return fmt.Sprintf("%s/%s", basicDir, workDir)
+}
+
+func detectContentType(filename string, data []byte) string {
+	switch filepath.Ext(filename) {
+	case ".css":
+		return "text/css; charset=utf-8"
+	case ".woff2":
+		return "font/woff2"
+	default:
+		return http.DetectContentType(data)
+	}
 }
 
 var bucket = flag.String("bucket", "", "")
