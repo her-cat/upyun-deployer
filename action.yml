@@ -15,7 +15,7 @@ inputs:
   dir:
     description: 'The directory where the site is located'
     required: false
-    default: '.'
+    default: ''
 runs:
   using: 'docker'
   image: 'Dockerfile'
