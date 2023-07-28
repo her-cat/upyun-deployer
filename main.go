@@ -188,7 +188,7 @@ func (d *UpYunDeployer) handleFile(wg *sync.WaitGroup, filename string, relative
 		return
 	}
 
-	if remoteFileInfo.Meta["Content-Type"] == contentType && remoteFileInfo.MD5 == fmt.Sprintf("%x", md5.Sum(data)) {
+	if remoteFileInfo.ContentType == contentType && remoteFileInfo.MD5 == fmt.Sprintf("%x", md5.Sum(data)) {
 		fmt.Printf("[%s] cached!\n", relativeFilename)
 		return
 	}
