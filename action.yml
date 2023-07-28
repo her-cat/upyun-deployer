@@ -16,9 +16,6 @@ inputs:
     description: 'The directory where the site is located'
     required: false
     default: '.'
-outputs:
-  output: # id of output
-    description: 'The time we greeted you'
 runs:
   using: 'docker'
   image: 'Dockerfile'
