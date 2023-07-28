@@ -237,28 +237,6 @@ func (d UpYunDeployer) listDirs(path string, ch chan *upyun.FileInfo) {
 	ch <- nil
 }
 
-func getCurrentExecutePath() string {
-	ex, err := os.Executable()
-	if err != nil {
-		panic(err)
-	}
-	return filepath.Dir(ex)
-}
-
-func getBasicDir(workDir string, level int) string {
-	segments := strings.Split(strings.Trim(getCurrentExecutePath(), "/"), "/")
-	max := len(segments) - level
-
-	basicDir := "/"
-	for i, segment := range segments {
-		if i < max {
-			basicDir = filepath.Join(basicDir, segment)
-		}
-	}
-
-	return fmt.Sprintf("%s/%s", basicDir, workDir)
-}
-
 func detectContentType(filename string, data []byte) string {
 	ext := filepath.Ext(filename)
 	if len(ext) > 0 {
@@ -283,7 +261,7 @@ func main() {
 
 	deployer := &UpYunDeployer{
 		up:       up,
-		basicDir: getBasicDir(*dir, 2),
+		basicDir: *dir,
 	}
 
 	begin := time.Now()
