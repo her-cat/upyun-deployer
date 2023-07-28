@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/upyun/go-sdk/v3/upyun"
 	"io/ioutil"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -259,14 +260,11 @@ func getBasicDir(workDir string, level int) string {
 }
 
 func detectContentType(filename string, data []byte) string {
-	switch filepath.Ext(filename) {
-	case ".css":
-		return "text/css; charset=utf-8"
-	case ".woff2":
-		return "font/woff2"
-	default:
-		return http.DetectContentType(data)
+	ext := filepath.Ext(filename)
+	if len(ext) > 0 {
+		return mime.TypeByExtension(filepath.Ext(filename))
 	}
+	return http.DetectContentType(data)
 }
 
 var bucket = flag.String("bucket", "", "")

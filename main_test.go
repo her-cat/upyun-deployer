@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func Test_detectContentType(t *testing.T) {
 	type args struct {
@@ -35,12 +38,13 @@ func Test_detectContentType(t *testing.T) {
 				filename: "some.html",
 				data:     nil,
 			},
-			want: "text/plain; charset=utf-8",
+			want: "text/html; charset=utf-8",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := detectContentType(tt.args.filename, tt.args.data)
+			fmt.Println(got)
 			if got != tt.want {
 				t.Errorf("detectContentType() got = %v, want %v", got, tt.want)
 			}
