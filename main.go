@@ -262,7 +262,7 @@ func getBasicDir(workDir string, level int) string {
 func detectContentType(filename string, data []byte) string {
 	ext := filepath.Ext(filename)
 	if len(ext) > 0 {
-		return mime.TypeByExtension(filepath.Ext(filename))
+		return mime.TypeByExtension(ext)
 	}
 	return http.DetectContentType(data)
 }
