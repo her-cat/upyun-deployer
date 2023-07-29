@@ -19,8 +19,3 @@ inputs:
 runs:
   using: 'docker'
   image: 'Dockerfile'
-  args:
-    - ${{ inputs.bucket }}
-    - ${{ inputs.operator }}
-    - ${{ inputs.password }}
-    - ${{ inputs.dir }}
