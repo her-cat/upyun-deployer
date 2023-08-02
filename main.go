@@ -16,8 +16,9 @@ import (
 )
 
 type UpYunDeployer struct {
-	up       *upyun.UpYun
-	basicDir string
+	up         *upyun.UpYun
+	localDir   string
+	publishDir string
 }
 
 func (d *UpYunDeployer) GetAllRemoteFiles() (map[string]int, map[string]int) {
@@ -68,17 +69,23 @@ func (d *UpYunDeployer) GetAllRemoteFilesByPath(path string) (map[string]int, ma
 }
 
 func (d *UpYunDeployer) UploadFiles() {
-	files, dirs := d.GetAllRemoteFiles()
+	publishDir := d.publishDir
+	if len(publishDir) == 0 {
+		publishDir = "/"
+	}
+
+	files, dirs := d.GetAllRemoteFilesByPath(publishDir)
 
 	var urls []string
 	wg := &sync.WaitGroup{}
 
-	err := filepath.Walk(d.basicDir, func(filename string, file os.FileInfo, err error) error {
+	err := filepath.Walk(d.localDir, func(filename string, file os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
-		relativeFilename := strings.Trim(strings.ReplaceAll(filename, d.basicDir, ""), "/")
+		relativeFilename := strings.Trim(strings.ReplaceAll(filename, d.localDir, ""), "/")
+		relativeFilename = fmt.Sprintf("%s/%s", d.publishDir, relativeFilename)
 
 		if file.IsDir() || strings.HasPrefix(file.Name(), ".") || strings.HasPrefix(relativeFilename, ".") {
 			fmt.Printf("[%s] skiped!\n", relativeFilename)
@@ -122,12 +129,25 @@ func (d *UpYunDeployer) UploadFiles() {
 
 func (d *UpYunDeployer) deleteFiles(files map[string]int) {
 	fmt.Println("deleting files...")
-	for file := range files {
-		_ = d.up.Delete(&upyun.DeleteObjectConfig{
-			Path:  file,
-			Async: true,
-		})
-		fmt.Printf("[%s] deleted!\n", file)
+	ch := make(chan string, 10)
+	go func() {
+		for file := range files {
+			ch <- file
+		}
+		ch <- ""
+	}()
+
+	for file := range ch {
+		if len(file) == 0 {
+			break
+		}
+		go func(f string) {
+			_ = d.up.Delete(&upyun.DeleteObjectConfig{
+				Path:  f,
+				Async: true,
+			})
+			fmt.Printf("[%s] deleted!\n", f)
+		}(file)
 	}
 }
 
@@ -248,7 +268,8 @@ func detectContentType(filename string, data []byte) string {
 var bucket = flag.String("bucket", "", "")
 var operator = flag.String("operator", "", "")
 var password = flag.String("password", "", "")
-var dir = flag.String("dir", "", "")
+var localDir = flag.String("local_dir", "", "")
+var publishDir = flag.String("publish_dir", "", "")
 
 func main() {
 	flag.Parse()
@@ -260,8 +281,9 @@ func main() {
 	})
 
 	deployer := &UpYunDeployer{
-		up:       up,
-		basicDir: *dir,
+		up:         up,
+		localDir:   strings.TrimPrefix(*localDir, "./"),
+		publishDir: strings.TrimPrefix(*publishDir, "./"),
 	}
 
 	begin := time.Now()

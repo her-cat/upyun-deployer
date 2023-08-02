@@ -13,9 +13,13 @@ inputs:
     description: "Your operator's password on upyun"
     required: true
   dir:
-    description: 'The directory where the site is located'
+    description: 'The directory where the files is located'
     required: false
     default: ''
+  publish_dir:
+      description: 'The directory of the file on upyun'
+      required: false
+      default: ''
 runs:
   using: 'docker'
   image: 'Dockerfile'
