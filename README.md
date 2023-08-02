@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@master
 
       - name: Setup Hugo
-        uses: peaceiris/actions-hugo@v1.0.1
+        uses: peaceiris/actions-hugo@v1
         with:
           hugo-version: '0.101.0'
 
@@ -41,7 +41,7 @@ jobs:
         run: hugo --minify --environment production
 
       - name: Deploy
-        uses: her-cat/upyun-deployer@v1
+        uses: her-cat/upyun-deployer@v1.0.1
         with:
           bucket: ${{ secrets.UPYUN_BUCKET }}
           operator: ${{ secrets.UPYUN_OPERATOR_NAME }}
