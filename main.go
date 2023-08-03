@@ -2,8 +2,10 @@ package main
 
 import (
 	"crypto/md5"
+	"errors"
 	"flag"
 	"fmt"
+	"github.com/avast/retry-go/v4"
 	"github.com/upyun/go-sdk/v3/upyun"
 	"io/ioutil"
 	"mime"
@@ -14,6 +16,8 @@ import (
 	"sync"
 	"time"
 )
+
+const retryDelay = time.Millisecond * 500
 
 type UpYunDeployer struct {
 	up         *upyun.UpYun
@@ -75,6 +79,8 @@ func (d *UpYunDeployer) UploadFiles() {
 	}
 
 	files, dirs := d.GetAllRemoteFilesByPath(publishDir)
+	existsFileCount := len(files)
+	uploadedFileCount := 0
 
 	var urls []string
 	wg := &sync.WaitGroup{}
@@ -85,12 +91,13 @@ func (d *UpYunDeployer) UploadFiles() {
 		}
 
 		relativeFilename := strings.Trim(strings.ReplaceAll(filename, d.localDir, ""), "/")
-		relativeFilename = fmt.Sprintf("%s/%s", d.publishDir, relativeFilename)
 
 		if file.IsDir() || strings.HasPrefix(file.Name(), ".") || strings.HasPrefix(relativeFilename, ".") {
-			fmt.Printf("[%s] skiped!\n", relativeFilename)
+			fmt.Printf("[%s/%s] skiped!\n", d.publishDir, relativeFilename)
 			return nil
 		}
+
+		relativeFilename = filepath.Join(d.publishDir, relativeFilename)
 
 		delete(files, relativeFilename)
 		urls = append(urls, relativeFilename)
@@ -106,13 +113,17 @@ func (d *UpYunDeployer) UploadFiles() {
 
 		go d.handleFile(wg, filename, relativeFilename)
 
+		uploadedFileCount++
+
 		return nil
 	})
 
 	wg.Wait()
 
+	fmt.Printf("exists: %d, uploaded: %d\n", existsFileCount, uploadedFileCount)
+
 	if err != nil {
-		fmt.Printf("err: %s\n", err)
+		fmt.Printf("file walk err: %s\n", err)
 		return
 	}
 
@@ -129,7 +140,7 @@ func (d *UpYunDeployer) UploadFiles() {
 
 func (d *UpYunDeployer) deleteFiles(files map[string]int) {
 	fmt.Println("deleting files...")
-	ch := make(chan string, 10)
+	ch := make(chan string, 20)
 	go func() {
 		for file := range files {
 			ch <- file
@@ -142,10 +153,11 @@ func (d *UpYunDeployer) deleteFiles(files map[string]int) {
 			break
 		}
 		go func(f string) {
-			_ = d.up.Delete(&upyun.DeleteObjectConfig{
-				Path:  f,
-				Async: true,
-			})
+			err := d.deleteFile(f, true)
+			if err != nil {
+				fmt.Printf("[%s] delete failed: %v\n", f, err)
+				return
+			}
 			fmt.Printf("[%s] deleted!\n", f)
 		}(file)
 	}
@@ -172,9 +184,11 @@ func (d *UpYunDeployer) deleteDirs(dirs map[string]int) {
 	}
 
 	for _, dir := range sortedDirs {
-		_ = d.up.Delete(&upyun.DeleteObjectConfig{
-			Path: dir,
-		})
+		err := d.deleteFile(dir, true)
+		if err != nil {
+			fmt.Printf("[%s] delete failed: %v", dir, err)
+			continue
+		}
 		fmt.Printf("[%s] deleted!\n", dir)
 	}
 }
@@ -191,7 +205,7 @@ func (d *UpYunDeployer) handleFile(wg *sync.WaitGroup, filename string, relative
 
 	contentType := detectContentType(filename, data)
 
-	remoteFileInfo, err := d.up.GetInfo(relativeFilename)
+	remoteFileInfo, err := d.getFileInfo(relativeFilename)
 	putObjectConfig := &upyun.PutObjectConfig{
 		Path:      relativeFilename,
 		LocalPath: filename,
@@ -205,34 +219,95 @@ func (d *UpYunDeployer) handleFile(wg *sync.WaitGroup, filename string, relative
 		return
 	}
 
-	if err != nil {
-		return
-	}
-
-	if remoteFileInfo.ContentType == contentType && remoteFileInfo.MD5 == fmt.Sprintf("%x", md5.Sum(data)) {
-		fmt.Printf("[%s] cached!\n", relativeFilename)
-		return
-	}
-
-	err = d.up.Delete(&upyun.DeleteObjectConfig{Path: relativeFilename})
-	if err != nil {
-		return
+	if err == nil {
+		if remoteFileInfo.ContentType == contentType && remoteFileInfo.MD5 == fmt.Sprintf("%x", md5.Sum(data)) {
+			fmt.Printf("[%s] cached!\n", relativeFilename)
+			return
+		}
+		err = d.deleteFile(relativeFilename, true)
+		if err != nil {
+			fmt.Printf("[%s] failed to delete before uploading: %v\n", relativeFilename, err)
+			return
+		}
+	} else {
+		fmt.Printf("[%s] get file info failed: %v\n", relativeFilename, err)
 	}
 
 	d.uploadFile(putObjectConfig, true)
 }
 
+func (d *UpYunDeployer) getFileInfo(filename string) (*upyun.FileInfo, error) {
+	var err error
+	var fileInfo *upyun.FileInfo
+
+	_ = retry.Do(
+		func() error {
+			fileInfo, err = d.up.GetInfo(filename)
+			return err
+		},
+		retry.RetryIf(func(err error) bool {
+			return !upyun.IsNotExist(err)
+		}),
+		retry.OnRetry(func(n uint, err error) {
+			fmt.Printf("[%s] retrying to get file info\n", filename)
+		}),
+		retry.Delay(retryDelay),
+		retry.Attempts(3),
+	)
+
+	return fileInfo, err
+}
+
 func (d *UpYunDeployer) uploadFile(putObjectConfig *upyun.PutObjectConfig, refresh bool) {
+	err := retry.Do(
+		func() error {
+			return d.up.Put(putObjectConfig)
+		},
+		retry.OnRetry(func(n uint, err error) {
+			fmt.Printf("[%s] retrying to upload file info\n", putObjectConfig.Path)
+		}),
+		retry.Delay(retryDelay),
+		retry.Attempts(3),
+	)
+
 	action := "upload"
 	if refresh {
 		action = "refresh"
 	}
-	err := d.up.Put(putObjectConfig)
+
 	if err == nil {
 		fmt.Printf("[%s] %sed!\n", putObjectConfig.Path, action)
 	} else {
-		fmt.Printf("[%s] %s failed !\n", putObjectConfig.Path, action)
+		fmt.Printf("[%s] %s failed: %v\n", putObjectConfig.Path, action, errors.Unwrap(err))
 	}
+}
+
+func (d *UpYunDeployer) deleteFile(path string, async bool) error {
+	err := retry.Do(
+		func() error {
+			return d.up.Delete(&upyun.DeleteObjectConfig{
+				Path:  path,
+				Async: async,
+			})
+		},
+		retry.RetryIf(func(err error) bool {
+			return !upyun.IsNotExist(err)
+		}),
+		retry.OnRetry(func(n uint, err error) {
+			fmt.Printf("[%s] retrying to delete file info\n", path)
+		}),
+		retry.Delay(retryDelay),
+		retry.Attempts(3),
+	)
+
+	err = errors.Unwrap(err)
+
+	if upyun.IsNotExist(err) {
+		fmt.Printf("[%s] file does not exist when deleting", path)
+		return nil
+	}
+
+	return err
 }
 
 func (d UpYunDeployer) listDirs(path string, ch chan *upyun.FileInfo) {
@@ -246,7 +321,7 @@ func (d UpYunDeployer) listDirs(path string, ch chan *upyun.FileInfo) {
 			},
 		})
 		if err != nil {
-			fmt.Println("err:", err)
+			fmt.Printf("[%s] list dirs failed: %v\n", path, err)
 		}
 	}()
 
@@ -283,7 +358,7 @@ func main() {
 	deployer := &UpYunDeployer{
 		up:         up,
 		localDir:   strings.TrimPrefix(*localDir, "./"),
-		publishDir: strings.TrimPrefix(*publishDir, "./"),
+		publishDir: strings.Trim(*publishDir, "./"),
 	}
 
 	begin := time.Now()
