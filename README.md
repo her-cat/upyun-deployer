@@ -41,7 +41,7 @@ jobs:
         run: hugo --minify --environment production
 
       - name: Deploy
-        uses: her-cat/upyun-deployer@v1.0.1
+        uses: her-cat/upyun-deployer@v1.0.2
         with:
           bucket: ${{ secrets.UPYUN_BUCKET }}
           operator: ${{ secrets.UPYUN_OPERATOR_NAME }}
