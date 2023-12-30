@@ -25,6 +25,8 @@ type UpYunDeployer struct {
 	publishDir string
 }
 
+var taskQueue = make(chan struct{}, 100)
+
 func (d *UpYunDeployer) GetAllRemoteFiles() (map[string]int, map[string]int) {
 	return d.GetAllRemoteFilesByPath("/")
 }
@@ -61,6 +63,10 @@ func (d *UpYunDeployer) GetAllRemoteFilesByPath(path string) (map[string]int, ma
 
 		if !obj.IsDir {
 			files[obj.Name] = depth
+			continue
+		}
+
+		if _, exists := directories[obj.Name]; exists {
 			continue
 		}
 
@@ -310,12 +316,14 @@ func (d *UpYunDeployer) deleteFile(path string, async bool) error {
 	return err
 }
 
-func (d UpYunDeployer) listDirs(path string, ch chan *upyun.FileInfo) {
+func (d *UpYunDeployer) listDirs(path string, ch chan *upyun.FileInfo) {
+	taskQueue <- struct{}{}
 	objsChan := make(chan *upyun.FileInfo)
 	go func() {
 		err := d.up.List(&upyun.GetObjectsConfig{
-			Path:        path,
-			ObjectsChan: objsChan,
+			Path:         path,
+			ObjectsChan:  objsChan,
+			MaxListTries: 3,
 			Headers: map[string]string{
 				"X-List-Limit": "10000",
 			},
@@ -323,6 +331,10 @@ func (d UpYunDeployer) listDirs(path string, ch chan *upyun.FileInfo) {
 		if err != nil {
 			fmt.Printf("[%s] list dirs failed: %v\n", path, err)
 		}
+
+		defer func() {
+			<-taskQueue
+		}()
 	}()
 
 	for obj := range objsChan {
