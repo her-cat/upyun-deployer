@@ -320,14 +320,26 @@ func (d *UpYunDeployer) listDirs(path string, ch chan *upyun.FileInfo) {
 	taskQueue <- struct{}{}
 	objsChan := make(chan *upyun.FileInfo)
 	go func() {
-		err := d.up.List(&upyun.GetObjectsConfig{
-			Path:         path,
-			ObjectsChan:  objsChan,
-			MaxListTries: 3,
-			Headers: map[string]string{
-				"X-List-Limit": "10000",
+		err := retry.Do(
+			func() error {
+				return d.up.List(&upyun.GetObjectsConfig{
+					Path:         path,
+					ObjectsChan:  objsChan,
+					MaxListTries: 3,
+					Headers: map[string]string{
+						"X-List-Limit": "10000",
+					},
+				})
 			},
-		})
+			retry.RetryIf(func(err error) bool {
+				return upyun.IsTooManyRequests(err)
+			}),
+			retry.OnRetry(func(n uint, err error) {
+				fmt.Printf("[%s] retrying to get objects\n", path)
+			}),
+			retry.Delay(retryDelay),
+			retry.Attempts(10),
+		)
 		if err != nil {
 			fmt.Printf("[%s] list dirs failed: %v\n", path, err)
 		}
