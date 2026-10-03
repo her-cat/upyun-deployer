@@ -51,3 +51,60 @@ func Test_detectContentType(t *testing.T) {
 		})
 	}
 }
+
+func Test_validateRequiredInputs(t *testing.T) {
+	tests := []struct {
+		name     string
+		bucket   string
+		operator string
+		password string
+		wantErr  string
+	}{
+		{
+			name:     "all required inputs present",
+			bucket:   "bucket",
+			operator: "operator",
+			password: "password",
+		},
+		{
+			name:     "bucket missing",
+			operator: "operator",
+			password: "password",
+			wantErr:  "missing required input(s): bucket",
+		},
+		{
+			name:     "operator missing",
+			bucket:   "bucket",
+			password: "password",
+			wantErr:  "missing required input(s): operator",
+		},
+		{
+			name:     "password missing",
+			bucket:   "bucket",
+			operator: "operator",
+			wantErr:  "missing required input(s): password",
+		},
+		{
+			name:    "all required inputs missing",
+			wantErr: "missing required input(s): bucket, operator, password",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateRequiredInputs(tt.bucket, tt.operator, tt.password)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validateRequiredInputs() error = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("validateRequiredInputs() error = nil, want %q", tt.wantErr)
+			}
+			if err.Error() != tt.wantErr {
+				t.Errorf("validateRequiredInputs() error = %q, want %q", err.Error(), tt.wantErr)
+			}
+		})
+	}
+}

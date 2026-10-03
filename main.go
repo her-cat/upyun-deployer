@@ -364,6 +364,25 @@ func detectContentType(filename string, data []byte) string {
 	return http.DetectContentType(data)
 }
 
+func validateRequiredInputs(bucket, operator, password string) error {
+	missing := make([]string, 0, 3)
+	if bucket == "" {
+		missing = append(missing, "bucket")
+	}
+	if operator == "" {
+		missing = append(missing, "operator")
+	}
+	if password == "" {
+		missing = append(missing, "password")
+	}
+
+	if len(missing) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf("missing required input(s): %s", strings.Join(missing, ", "))
+}
+
 var bucket = flag.String("bucket", "", "")
 var operator = flag.String("operator", "", "")
 var password = flag.String("password", "", "")
@@ -372,6 +391,11 @@ var publishDir = flag.String("publish_dir", "", "")
 
 func main() {
 	flag.Parse()
+
+	if err := validateRequiredInputs(*bucket, *operator, *password); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 
 	up := upyun.NewUpYun(&upyun.UpYunConfig{
 		Bucket:   *bucket,
